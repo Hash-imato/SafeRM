@@ -60,4 +60,7 @@ SafeRM- A Safer Undoable Replacement for rm
 
    **- The -d (remove empty directories) option is not supported. Use -r/-R
      to remove directories.**
+   Note: *This project is currently in its early stages. I will continue to 
+   improve and contribute to the project, and I will also take your feedback 
+   and suggestions into consideration as I develop it further.*
 ```
