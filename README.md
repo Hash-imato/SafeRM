@@ -42,7 +42,7 @@ SafeRM- A Safer Undoable Replacement for rm
    undelete last                 -> restores the most recently deleted item
    undelete --all                -> restores everything currently in the trash
 
- IMPORTANT LIMITATIONS
+# IMPORTANT LIMITATIONS
    **- This protection only applies when the "rm" command is invoked by its
      plain name through PATH. A program that directly calls /usr/bin/rm is
      NOT affected (this is intentional, to avoid breaking system scripts).**
@@ -58,6 +58,6 @@ SafeRM- A Safer Undoable Replacement for rm
      (~/.local/share), this is not an issue because the move is performed as
      a fast filesystem-level rename.**
 
-   - The -d (remove empty directories) option is not supported. Use -r/-R
-#     to remove directories.
+   **- The -d (remove empty directories) option is not supported. Use -r/-R
+     to remove directories.**
 ```
