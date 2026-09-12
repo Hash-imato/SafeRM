@@ -1,8 +1,6 @@
 # SafeRM
 SafeRM- A Safer Undoable Replacement for rm
 
- saferm - A safe deletion utility that mimics rm with a 5-minute undo window.
-
 # HOW IT WORKS
    Every file/directory deleted with "rm" is actually MOVED to its own unique
    subdirectory under $TRASH_ROOT. After 300 seconds, it is permanently
