@@ -5,7 +5,7 @@ RETENTION_SECONDS=300
 TRASH_ROOT="${XDG_DATA_HOME:-$HOME/.local/share}/saferm_trash"
 mkdir -p "$TRASH_ROOT"
 
-# ---------- yardımcı fonksiyonlar ----------
+# ---------- helper functions ----------
 
 now_epoch() { date +%s; }
 
@@ -14,9 +14,9 @@ gen_id() {
 }
 
 abs_path() {
-    # Sembolik bağları çözmeden mutlak yola çevirir. rm, bir sembolik bağı
-    # sildiğinde bağın kendisini siler, hedefini değil - bu davranışı
-    # korumak için realpath/readlink kullanmıyoruz (onlar hedefe göre çözer).
+    # Converts a path to an absolute path without resolving symbolic links.
+    # When rm deletes a symbolic link, it deletes the link itself, not its target.
+    # We preserve this behavior by not using realpath/readlink.
     local p="$1"
     if [[ "$p" = /* ]]; then
         printf '%s\n' "$p"
@@ -61,7 +61,7 @@ remaining_seconds() {
     echo "$left"
 }
 
-# ---------- rm davranışı ----------
+# ---------- rm behavior ----------
 
 do_rm() {
     local recursive=0 force=0 interactive=0 verbose=0
@@ -90,7 +90,7 @@ do_rm() {
                         i) interactive=1 ;;
                         v) verbose=1 ;;
                         *)
-                            echo "rm: geçersiz seçenek -- '$c'" >&2
+                            echo "rm: invalid option -- '$c'" >&2
                             return 1
                             ;;
                     esac
@@ -106,7 +106,7 @@ do_rm() {
         if (( force )); then
             return 0
         fi
-        echo "rm: eksik işlenecek dosya adı" >&2
+        echo "rm: missing operand" >&2
         return 1
     fi
 
@@ -116,20 +116,20 @@ do_rm() {
     for path in "${targets[@]}"; do
         if [[ ! -e "$path" && ! -L "$path" ]]; then
             if (( ! force )); then
-                echo "rm: '$path' kaldırılamıyor: Böyle bir dosya veya dizin yok" >&2
+                echo "rm: cannot remove '$path': No such file or directory" >&2
                 exit_code=1
             fi
             continue
         fi
 
         if [[ -d "$path" && ! -L "$path" && $recursive -eq 0 ]]; then
-            echo "rm: '$path' kaldırılamıyor: Dizin (bir dizini silmek için -r kullan)" >&2
+            echo "rm: cannot remove '$path': Is a directory (use -r to remove)" >&2
             exit_code=1
             continue
         fi
 
         if (( interactive )); then
-            read -r -p "rm: '$path' kaldırılsın mı? (e/h) " reply
+            read -r -p "rm: remove '$path'? (y/n) " reply
             case "$reply" in
                 e|E|y|Y) ;;
                 *) continue ;;
@@ -142,7 +142,7 @@ do_rm() {
         mkdir -p "$entry_dir"
 
         if ! command -p mv -- "$path" "$entry_dir/payload" 2>/tmp/.saferm_err; then
-            echo "rm: '$path' taşınamadı: $(cat /tmp/.saferm_err 2>/dev/null)" >&2
+            echo "rm: failed to move '$path': $(cat /tmp/.saferm_err 2>/dev/null)" >&2
             command -p rm -rf -- "$entry_dir"
             exit_code=1
             continue
@@ -156,38 +156,38 @@ do_rm() {
         schedule_bg_purge "$entry_dir"
 
         if (( verbose )); then
-            echo "kaldırıldı: '$path'  (geri almak için: undelete $entry_id  |  pencere: 5 dk)"
+            echo "removed: '$path'  (to restore: undelete $entry_id  |  window: 5 min)"
         fi
     done
 
     return $exit_code
 }
 
-# ---------- undelete davranışı ----------
+# ---------- undelete behavior ----------
 
 list_trash() {
     purge_expired
     local dir meta original_path deleted_at left found=0
     shopt -s nullglob
-    printf '%-24s %-8s %s\n' "ID" "KALAN" "ORİJİNAL KONUM"
+    printf '%-24s %-8s %s\n' "ID" "REMAINING" "ORIGINAL LOCATION"
     for dir in "$TRASH_ROOT"/*/; do
         meta="${dir}meta"
         [[ -f "$meta" ]] || continue
         original_path=$(grep -m1 '^original_path=' "$meta" | cut -d= -f2-)
         deleted_at=$(grep -m1 '^deleted_at=' "$meta" | cut -d= -f2)
         left=$(remaining_seconds "$deleted_at")
-        printf '%-24s %-8s %s\n' "$(basename "$dir")" "${left}sn" "$original_path"
+        printf '%-24s %-8s %s\n' "$(basename "$dir")" "${left}s" "$original_path"
         found=1
     done
     shopt -u nullglob
-    (( found )) || echo "(çöp kutusu boş)"
+    (( found )) || echo "(trash is empty)"
 }
 
 restore_entry_dir() {
     local entry_dir="$1"
     local meta="${entry_dir}meta"
     if [[ ! -f "$meta" ]]; then
-        echo "undelete: geçersiz kayıt: $entry_dir" >&2
+        echo "undelete: invalid entry: $entry_dir" >&2
         return 1
     fi
 
@@ -197,7 +197,7 @@ restore_entry_dir() {
     left=$(remaining_seconds "$deleted_at")
 
     if (( left <= 0 )); then
-        echo "undelete: '$original_path' için geri alma süresi dolmuş" >&2
+        echo "undelete: restore window for '$original_path' has expired" >&2
         command -p rm -rf -- "$entry_dir"
         return 1
     fi
@@ -205,16 +205,16 @@ restore_entry_dir() {
     target="$original_path"
     if [[ -e "$target" || -L "$target" ]]; then
         target="${original_path}.restored-$(date +%s)"
-        echo "undelete: '$original_path' zaten mevcut, bunun yerine '$target' olarak geri getiriliyor" >&2
+        echo "undelete: '$original_path' already exists, restoring as '$target' instead" >&2
     fi
 
     mkdir -p "$(dirname "$target")"
     if command -p mv -- "${entry_dir}payload" "$target"; then
         command -p rm -rf -- "$entry_dir"
-        echo "geri getirildi: '$target'"
+        echo "restored: '$target'"
         return 0
     else
-        echo "undelete: '$target' konumuna geri getirilemedi" >&2
+        echo "undelete: could not restore to '$target'" >&2
         return 1
     fi
 }
@@ -240,15 +240,15 @@ do_undelete() {
                 any=1
             done
             shopt -u nullglob
-            (( any )) || echo "(çöp kutusu boş)"
+            (( any )) || echo "(trash is empty)"
             return 0
             ;;
         last)
-            # Kayıt klasörü adları sabit genişlikli zaman damgasıyla başlar
-            # (YYYYAAGGSSDDNN + nanosaniye), bu yüzden alfabetik sıralamadaki
-            # SON öğe her zaman kronolojik olarak da en son silinendir.
-            # (deleted_at alanı saniye hassasiyetinde olduğundan, aynı saniye
-            # içinde birden fazla silme olduğunda tek başına yetersiz kalır.)
+            # Entry directory names begin with a fixed-width timestamp
+            # (YYYYMMDDHHMMSS + nanoseconds), so the LAST item in alphabetical
+            # order is also the most recently deleted item chronologically.
+            # Since deleted_at has only second-level precision, it is not enough
+            # by itself when multiple deletions occur within the same second.
             local newest="" dir meta
             shopt -s nullglob
             for dir in "$TRASH_ROOT"/*/; do
@@ -258,7 +258,7 @@ do_undelete() {
             done
             shopt -u nullglob
             if [[ -z "$newest" ]]; then
-                echo "(çöp kutusu boş)"
+                echo "(trash is empty)"
                 return 1
             fi
             restore_entry_dir "$newest"
@@ -285,7 +285,7 @@ do_undelete() {
                 done
                 shopt -u nullglob
                 if (( ! found )); then
-                    echo "undelete: '$id' çöp kutusunda bulunamadı" >&2
+                    echo "undelete: '$id' not found in trash" >&2
                     exit_code=1
                 fi
             done
@@ -294,7 +294,7 @@ do_undelete() {
     esac
 }
 
-# ---------- giriş noktası ----------
+# ---------- entry point ----------
 
 prog="$(basename -- "$0")"
 purge_expired
