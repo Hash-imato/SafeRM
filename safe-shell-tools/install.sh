@@ -1,7 +1,8 @@
+```bash
 #!/usr/bin/env bash
 #
-# install.sh - safe-shell-tools için otomatik kurulum betiği.
-# Bu betiği repo'nun kök dizininden çalıştır: ./install.sh
+# install.sh - automatic installer for safe-shell-tools.
+# Run this script from the repository root: ./install.sh
 
 set -euo pipefail
 
@@ -10,56 +11,57 @@ BIN_DIR="$HOME/.local/bin"
 SHARE_DIR="$HOME/.local/share/safe-shell-tools"
 BASHRC="$HOME/.bashrc"
 
-echo "==> Dizinler hazırlanıyor..."
+echo "==> Preparing directories..."
 mkdir -p "$BIN_DIR" "$SHARE_DIR"
 
-echo "==> saferm ve safels kopyalanıyor..."
+echo "==> Copying saferm and safels..."
 cp "$REPO_DIR/bin/saferm" "$BIN_DIR/saferm"
 cp "$REPO_DIR/bin/safels" "$BIN_DIR/safels"
 chmod +x "$BIN_DIR/saferm" "$BIN_DIR/safels"
 
-echo "==> rm / undelete / ls sembolik bağları oluşturuluyor..."
+echo "==> Creating symbolic links for rm / undelete / ls..."
 ln -sf "$BIN_DIR/saferm" "$BIN_DIR/rm"
 ln -sf "$BIN_DIR/saferm" "$BIN_DIR/undelete"
 ln -sf "$BIN_DIR/safels" "$BIN_DIR/ls"
 
-echo "==> cd/mkdir fonksiyon dosyası kopyalanıyor..."
+echo "==> Copying the cd/mkdir function file..."
 cp "$REPO_DIR/shell/safe-shell-functions.sh" "$SHARE_DIR/safe-shell-functions.sh"
 
 PATH_LINE='export PATH="$HOME/.local/bin:$PATH"'
 SOURCE_LINE="source \"$SHARE_DIR/safe-shell-functions.sh\""
 
-echo "==> ~/.bashrc kontrol ediliyor..."
+echo "==> Checking ~/.bashrc..."
 touch "$BASHRC"
 
 if ! grep -qF "$PATH_LINE" "$BASHRC"; then
     {
         echo ""
-        echo "# safe-shell-tools: ~/.local/bin, sistem araçlarından önce aransın"
+        echo "# safe-shell-tools: search ~/.local/bin before system tools"
         echo "$PATH_LINE"
     } >> "$BASHRC"
-    echo "    PATH satırı eklendi."
+    echo "    PATH entry added."
 else
-    echo "    PATH satırı zaten var, atlanıyor."
+    echo "    PATH entry already exists, skipping."
 fi
 
 if ! grep -qF "$SOURCE_LINE" "$BASHRC"; then
     {
         echo ""
-        echo "# safe-shell-tools: cd (geçmiş) ve mkdir (içine gir sorusu) fonksiyonları"
+        echo "# safe-shell-tools: cd (history) and mkdir (enter-directory prompt) functions"
         echo "$SOURCE_LINE"
     } >> "$BASHRC"
-    echo "    source satırı eklendi."
+    echo "    source entry added."
 else
-    echo "    source satırı zaten var, atlanıyor."
+    echo "    source entry already exists, skipping."
 fi
 
 echo
-echo "Kurulum tamamlandı."
-echo "Etkin olması için: source ~/.bashrc   (ya da yeni bir terminal aç)"
+echo "Installation completed successfully."
+echo "To activate it: source ~/.bashrc   (or open a new terminal)"
 echo
-echo "Doğrulama:"
-echo "  which rm     -> ~/.local/bin/rm göstermeli"
-echo "  which ls     -> ~/.local/bin/ls göstermeli"
-echo "  type cd      -> \"cd is a function\" göstermeli"
-echo "  type mkdir   -> \"mkdir is a function\" göstermeli"
+echo "Verification:"
+echo "  which rm     -> should show ~/.local/bin/rm"
+echo "  which ls     -> should show ~/.local/bin/ls"
+echo "  type cd      -> should show \"cd is a function\""
+echo "  type mkdir   -> should show \"mkdir is a function\""
+```
