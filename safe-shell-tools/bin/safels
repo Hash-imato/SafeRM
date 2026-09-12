@@ -1,0 +1,154 @@
+#!/usr/bin/env bash
+#
+# safels - ls'e --tree ve --age bayraklarını ekleyen sarmalayıcı (wrapper).
+#
+# Bu ikisi dışındaki HER ŞEY (renkler, -l, -a, -h, çoklu yol, vs.) doğrudan
+# gerçek sistem ls'ine devredilir - yani normal ls kullanımını bozmaz.
+#
+# KURULUM
+#   cp safels ~/.local/bin/safels && chmod +x ~/.local/bin/safels
+#   ln -sf ~/.local/bin/safels ~/.local/bin/ls
+#   (~/.local/bin dizininin PATH'te /usr/bin'den önce geldiğinden emin ol)
+#
+# KULLANIM
+#   ls --tree              -> geçerli dizini ağaç (tree) şeklinde listeler
+#   ls --tree bir/yol      -> belirtilen dizini ağaç şeklinde listeler
+#   ls --tree -a           -> gizli dosyaları da (.başlayanlar) dahil eder
+#   ls --age               -> geçerli dizindeki dosyaların yaşını gösterir
+#   ls --age -a bir/yol    -> gizli dosyalar dahil, belirtilen dizin için
+#   ls ...normal bayraklar... -> aynen gerçek ls gibi davranır (değişmez)
+
+set -u
+
+humanize_age() {
+    # Saniye cinsinden farkı insan-okur formata çevirir.
+    local diff="$1"
+    if (( diff < 60 )); then
+        echo "az önce"
+    elif (( diff < 3600 )); then
+        echo "$(( diff / 60 )) dakika önce"
+    elif (( diff < 86400 )); then
+        echo "$(( diff / 3600 )) saat önce"
+    elif (( diff < 2592000 )); then
+        echo "$(( diff / 86400 )) gün önce"
+    elif (( diff < 31536000 )); then
+        echo "$(( diff / 2592000 )) ay önce"
+    else
+        echo "$(( diff / 31536000 )) yıl önce"
+    fi
+}
+
+run_age() {
+    local show_hidden=0 dir="."
+    local a
+    for a in "$@"; do
+        case "$a" in
+            -a|--all) show_hidden=1 ;;
+            *) dir="$a" ;;
+        esac
+    done
+
+    if [[ ! -d "$dir" ]]; then
+        echo "safels: '$dir' bir dizin değil ya da bulunamadı" >&2
+        return 1
+    fi
+
+    local -a entries=()
+    local f base
+    shopt -s nullglob
+    (( show_hidden )) && shopt -s dotglob
+    for f in "$dir"/*; do
+        base=$(basename -- "$f")
+        [[ "$base" == "." || "$base" == ".." ]] && continue
+        entries+=("$f")
+    done
+    shopt -u nullglob dotglob
+
+    if (( ${#entries[@]} == 0 )); then
+        echo "(boş)"
+        return 0
+    fi
+
+    local now mtime diff name age_str
+    now=$(date +%s)
+    for f in "${entries[@]}"; do
+        mtime=$(stat -c '%Y' -- "$f" 2>/dev/null) || continue
+        diff=$(( now - mtime ))
+        (( diff < 0 )) && diff=0
+        age_str=$(humanize_age "$diff")
+        name=$(basename -- "$f")
+        printf '%-40s %s\n' "$name" "$age_str"
+    done
+}
+
+run_tree() {
+    local show_hidden=0 dir="."
+    local a
+    for a in "$@"; do
+        case "$a" in
+            -a|--all) show_hidden=1 ;;
+            *) dir="$a" ;;
+        esac
+    done
+
+    if [[ ! -d "$dir" ]]; then
+        echo "safels: '$dir' bir dizin değil ya da bulunamadı" >&2
+        return 1
+    fi
+
+    echo "$dir"
+    _tree_walk "$dir" "" "$show_hidden"
+}
+
+_tree_walk() {
+    local dir="$1" prefix="$2" show_hidden="$3"
+    local -a entries=()
+    local f base
+
+    shopt -s nullglob
+    (( show_hidden )) && shopt -s dotglob
+    for f in "$dir"/*; do
+        base=$(basename -- "$f")
+        [[ "$base" == "." || "$base" == ".." ]] && continue
+        entries+=("$f")
+    done
+    shopt -u nullglob dotglob
+
+    local count=${#entries[@]}
+    local i connector new_prefix
+    for (( i=0; i<count; i++ )); do
+        base=$(basename -- "${entries[$i]}")
+        if (( i == count - 1 )); then
+            connector="└── "
+            new_prefix="${prefix}    "
+        else
+            connector="├── "
+            new_prefix="${prefix}│   "
+        fi
+        if [[ -d "${entries[$i]}" ]]; then
+            echo "${prefix}${connector}${base}/"
+            _tree_walk "${entries[$i]}" "$new_prefix" "$show_hidden"
+        else
+            echo "${prefix}${connector}${base}"
+        fi
+    done
+}
+
+# ---------- giriş noktası ----------
+
+mode=""
+declare -a passthrough=()
+
+for arg in "$@"; do
+    case "$arg" in
+        --tree) mode="tree" ;;
+        --age) mode="age" ;;
+        *) passthrough+=("$arg") ;;
+    esac
+done
+
+case "$mode" in
+    tree) run_tree "${passthrough[@]}" ;;
+    age)  run_age "${passthrough[@]}" ;;
+    *)    command -p ls "$@" ;;
+esac
