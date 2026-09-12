@@ -1,46 +1,50 @@
+```bash
 #!/usr/bin/env bash
 #
-# safels - ls'e --tree ve --age bayraklarını ekleyen sarmalayıcı (wrapper).
+# safels - a wrapper that adds --tree and --age options to ls.
 #
-# Bu ikisi dışındaki HER ŞEY (renkler, -l, -a, -h, çoklu yol, vs.) doğrudan
-# gerçek sistem ls'ine devredilir - yani normal ls kullanımını bozmaz.
+# EVERYTHING other than these two options (colors, -l, -a, -h, multiple paths,
+# etc.) is passed directly to the real system ls - so normal ls usage remains
+# unchanged.
 #
-# KURULUM
+# INSTALLATION
 #   cp safels ~/.local/bin/safels && chmod +x ~/.local/bin/safels
 #   ln -sf ~/.local/bin/safels ~/.local/bin/ls
-#   (~/.local/bin dizininin PATH'te /usr/bin'den önce geldiğinden emin ol)
+#   (Make sure ~/.local/bin appears before /usr/bin in PATH.)
 #
-# KULLANIM
-#   ls --tree              -> geçerli dizini ağaç (tree) şeklinde listeler
-#   ls --tree bir/yol      -> belirtilen dizini ağaç şeklinde listeler
-#   ls --tree -a           -> gizli dosyaları da (.başlayanlar) dahil eder
-#   ls --age               -> geçerli dizindeki dosyaların yaşını gösterir
-#   ls --age -a bir/yol    -> gizli dosyalar dahil, belirtilen dizin için
-#   ls ...normal bayraklar... -> aynen gerçek ls gibi davranır (değişmez)
+# USAGE
+#   ls --tree              -> lists the current directory as a tree
+#   ls --tree some/path    -> lists the specified directory as a tree
+#   ls --tree -a           -> includes hidden files (those beginning with .)
+#   ls --age               -> shows the age of files in the current directory
+#   ls --age -a some/path  -> includes hidden files for the specified directory
+#   ls ...normal options... -> behaves exactly like the real ls (unchanged)
 
 set -u
 
 humanize_age() {
-    # Saniye cinsinden farkı insan-okur formata çevirir.
+    # Convert a difference in seconds into a human-readable format.
     local diff="$1"
+
     if (( diff < 60 )); then
-        echo "az önce"
+        echo "just now"
     elif (( diff < 3600 )); then
-        echo "$(( diff / 60 )) dakika önce"
+        echo "$(( diff / 60 )) minutes ago"
     elif (( diff < 86400 )); then
-        echo "$(( diff / 3600 )) saat önce"
+        echo "$(( diff / 3600 )) hours ago"
     elif (( diff < 2592000 )); then
-        echo "$(( diff / 86400 )) gün önce"
+        echo "$(( diff / 86400 )) days ago"
     elif (( diff < 31536000 )); then
-        echo "$(( diff / 2592000 )) ay önce"
+        echo "$(( diff / 2592000 )) months ago"
     else
-        echo "$(( diff / 31536000 )) yıl önce"
+        echo "$(( diff / 31536000 )) years ago"
     fi
 }
 
 run_age() {
     local show_hidden=0 dir="."
     local a
+
     for a in "$@"; do
         case "$a" in
             -a|--all) show_hidden=1 ;;
@@ -49,34 +53,40 @@ run_age() {
     done
 
     if [[ ! -d "$dir" ]]; then
-        echo "safels: '$dir' bir dizin değil ya da bulunamadı" >&2
+        echo "safels: '$dir' is not a directory or could not be found" >&2
         return 1
     fi
 
     local -a entries=()
     local f base
+
     shopt -s nullglob
     (( show_hidden )) && shopt -s dotglob
+
     for f in "$dir"/*; do
         base=$(basename -- "$f")
         [[ "$base" == "." || "$base" == ".." ]] && continue
         entries+=("$f")
     done
+
     shopt -u nullglob dotglob
 
     if (( ${#entries[@]} == 0 )); then
-        echo "(boş)"
+        echo "(empty)"
         return 0
     fi
 
     local now mtime diff name age_str
     now=$(date +%s)
+
     for f in "${entries[@]}"; do
         mtime=$(stat -c '%Y' -- "$f" 2>/dev/null) || continue
         diff=$(( now - mtime ))
         (( diff < 0 )) && diff=0
+
         age_str=$(humanize_age "$diff")
         name=$(basename -- "$f")
+
         printf '%-40s %s\n' "$name" "$age_str"
     done
 }
@@ -84,6 +94,7 @@ run_age() {
 run_tree() {
     local show_hidden=0 dir="."
     local a
+
     for a in "$@"; do
         case "$a" in
             -a|--all) show_hidden=1 ;;
@@ -92,7 +103,7 @@ run_tree() {
     done
 
     if [[ ! -d "$dir" ]]; then
-        echo "safels: '$dir' bir dizin değil ya da bulunamadı" >&2
+        echo "safels: '$dir' is not a directory or could not be found" >&2
         return 1
     fi
 
@@ -107,17 +118,21 @@ _tree_walk() {
 
     shopt -s nullglob
     (( show_hidden )) && shopt -s dotglob
+
     for f in "$dir"/*; do
         base=$(basename -- "$f")
         [[ "$base" == "." || "$base" == ".." ]] && continue
         entries+=("$f")
     done
+
     shopt -u nullglob dotglob
 
     local count=${#entries[@]}
     local i connector new_prefix
+
     for (( i=0; i<count; i++ )); do
         base=$(basename -- "${entries[$i]}")
+
         if (( i == count - 1 )); then
             connector="└── "
             new_prefix="${prefix}    "
@@ -125,6 +140,7 @@ _tree_walk() {
             connector="├── "
             new_prefix="${prefix}│   "
         fi
+
         if [[ -d "${entries[$i]}" ]]; then
             echo "${prefix}${connector}${base}/"
             _tree_walk "${entries[$i]}" "$new_prefix" "$show_hidden"
@@ -134,7 +150,7 @@ _tree_walk() {
     done
 }
 
-# ---------- giriş noktası ----------
+# ---------- entry point ----------
 
 mode=""
 declare -a passthrough=()
@@ -152,3 +168,4 @@ case "$mode" in
     age)  run_age "${passthrough[@]}" ;;
     *)    command -p ls "$@" ;;
 esac
+```
